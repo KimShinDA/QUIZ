@@ -47,9 +47,9 @@ function render(){
       const term=document.createElement('span'); term.className='match-term'; term.textContent=pair.left;
       const select=document.createElement('select'); select.className='match-select'; select.dataset.matchIndex=String(i); select.setAttribute('aria-label',`Match for ${pair.left}`);
       const placeholder=document.createElement('option'); placeholder.value=''; placeholder.textContent='Choose a match…'; select.append(placeholder);
-      q.matching.forEach((option,j)=>{const el=document.createElement('option');el.value=String(j);el.textContent=option.right;select.append(el);});
-      if(selected[i]!==undefined)select.value=String(selected[i]);
-      select.disabled=checked;select.addEventListener('change',()=>{selected[i]=select.value===''?null:Number(select.value);$('next').disabled=q.matching.some((_,j)=>selected[j]===null||selected[j]===undefined);});
+      [...new Set(q.matching.map(option=>option.right))].forEach(answer=>{const el=document.createElement('option');el.value=answer;el.textContent=answer;select.append(el);});
+      if(selected[i]!==undefined)select.value=selected[i];
+      select.disabled=checked;select.addEventListener('change',()=>{selected[i]=select.value===''?null:select.value;$('next').disabled=q.matching.some((_,j)=>selected[j]===null||selected[j]===undefined);});
       row.append(term,select);area.append(row);
     });
   } else q.choices.forEach((choice,i)=>{
@@ -72,13 +72,13 @@ function toggle(letter){
   document.querySelectorAll('.answer').forEach(b=>b.classList.toggle('selected',selected.includes(b.querySelector('.answer-key').textContent)));
 }
 function isCorrect(){
-  const q=run[index]; if(isMatching(q))return q.matching.every((pair,i)=>selected[i]===i);
+  const q=run[index]; if(isMatching(q))return q.matching.every((pair,i)=>selected[i]===pair.right);
   const key=decodeAnswer(q); if(key===null)return false;
   return selected.length===key.length&&selected.every(x=>key.includes(x));
 }
 function pointsFor(q,response){
   if(!response?.checked)return 0;
-  if(isMatching(q))return q.matching.reduce((points,_,i)=>points+(response.selected[i]===i?1:0),0);
+  if(isMatching(q))return q.matching.reduce((points,pair,i)=>points+(response.selected[i]===pair.right?1:0),0);
   if(q.answer==='None')return response.selected.length===0?1:0;
   if(q.answer==='Match'||q.answer==='Order')return 0;
   const correct=[...q.answer].filter(c=>/[A-F]/.test(c));
@@ -91,38 +91,6 @@ function reveal(){
   updateScore();
   if(isMatching(q)){
     document.querySelectorAll('.match-select').forEach((control,i)=>{
-      control.classList.add(Number(control.value)===i?'match-correct':'match-wrong');
+      control.classList.add(control.value===q.matching[i].right?'match-correct':'match-wrong');
     });
   }
-  document.querySelectorAll('.answer').forEach(b=>{
-    const letter=b.querySelector('.answer-key').textContent;
-    if(key&&key.includes(letter))b.classList.add('correct');
-    else if(selected.includes(letter))b.classList.add('wrong');
-  });
-  const f=$('feedback'); f.classList.remove('hidden');
-  if(isMatching(q)){
-    const errors=q.matching.map((pair,i)=>selected[i]===i?null:`<b>${pair.left}</b> → ${pair.right}`).filter(Boolean);
-    f.classList.toggle('good',correct);f.innerHTML=correct?'<b>All matches correct.</b> Nice work.':`<b>Check these correct matches:</b><br>${errors.join('<br>')}`;
-  }
-  else if(key===null){f.innerHTML=`The reviewer marks this as a <b>${q.answer.toLowerCase()}</b> item. The matching/order layout is retained as written in the source.`;}
-  else if(!key.length){f.innerHTML=correct?'<b>Correct.</b> The reviewer key lists no correct option.':'<b>Incorrect.</b> The reviewer key lists no correct option; leave every choice unselected.';}
-  else if(correct){f.classList.add('good');f.innerHTML='<b>Correct.</b> Nice work.';}
-  else {const answer=key.length?key.join(', '):'No listed choice';f.innerHTML=`<b>Incorrect.</b> Correct answer: <b>${answer}</b>.`;}
-}
-function checkOrNext(){
-  if(!checked){const q=run[index];if(isMatching(q)){if(q.matching.some((_,i)=>selected[i]===null||selected[i]===undefined))return;}else if(!selected.length && q.answer!=='None')return;checked=true; history[index]={selected:[...selected],correct:isCorrect(),checked:true}; reveal();$('next').innerHTML=index===run.length-1?'See results <span>→</span>':'Next question <span>→</span>';return;}
-  if(index<run.length-1){index++;render();}else finish();
-}
-function back(){
-  if(index===0)return;
-  index--;render();
-}
-function finish(){
-  updateScore();
-  const maximum=maxPoints();
-  $('final-score').textContent=`${score} / ${maximum}`;
-  const pct=maximum?Math.round(score/maximum*100):0;
-  $('percent').textContent=`${pct}% correct`;
-  $('result-title').textContent=pct>=80?'Excellent work.':pct>=60?'Good progress.':'Keep practicing.';
-  $('result-copy').textContent=`You earned ${score} of ${maximum} possible points. Matching questions award one point for each correct pair. Review the questions you missed, then try again.`;
-  show('results');
