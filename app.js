@@ -25,6 +25,9 @@ function decodeAnswer(q){
 }
 function isMatching(q){ return q.type==='matching'&&Array.isArray(q.matching); }
 function render(){
+  const saved=history[index];
+  selected=saved?[...saved.selected]:[];
+  checked=!!saved?.checked;
   const q=run[index]; if(!q)return finish();
   const chapter=ranges.findIndex(([a,b])=>q.id>=a&&q.id<=b)+1;
   $('chapter-label').textContent=`CHAPTER 0${chapter}`;
@@ -73,10 +76,19 @@ function isCorrect(){
   const key=decodeAnswer(q); if(key===null)return false;
   return selected.length===key.length&&selected.every(x=>key.includes(x));
 }
+function pointsFor(q,response){
+  if(!response?.checked)return 0;
+  if(isMatching(q))return q.matching.reduce((points,_,i)=>points+(response.selected[i]===i?1:0),0);
+  if(q.answer==='None')return response.selected.length===0?1:0;
+  if(q.answer==='Match'||q.answer==='Order')return 0;
+  const correct=[...q.answer].filter(c=>/[A-F]/.test(c));
+  return response.selected.length===correct.length&&response.selected.every(c=>correct.includes(c))?1:0;
+}
+function maxPoints(){return run.reduce((total,q)=>total+(isMatching(q)?q.matching.length:1),0);}
+function updateScore(){score=run.reduce((total,q,i)=>total+pointsFor(q,history[i]),0);$('score').textContent=score;}
 function reveal(){
   const q=run[index], key=decodeAnswer(q), correct=isCorrect();
-  if(correct){const prior=history[index]; if(!prior||!prior.correct)score++;} 
-  $('score').textContent=score;
+  updateScore();
   if(isMatching(q)){
     document.querySelectorAll('.match-select').forEach((control,i)=>{
       control.classList.add(Number(control.value)===i?'match-correct':'match-wrong');
@@ -98,21 +110,19 @@ function reveal(){
   else {const answer=key.length?key.join(', '):'No listed choice';f.innerHTML=`<b>Incorrect.</b> Correct answer: <b>${answer}</b>.`;}
 }
 function checkOrNext(){
-  if(!checked){const q=run[index];if(isMatching(q)){if(selected.length!==q.matching.length||selected.some(v=>v===null||v===undefined))return;}else if(!selected.length && q.answer!=='None')return;checked=true; history[index]={selected:[...selected],correct:isCorrect()}; reveal();$('next').innerHTML=index===run.length-1?'See results <span>→</span>':'Next question <span>→</span>';return;}
-  if(index<run.length-1){index++;selected=[];checked=false;render();}else finish();
+  if(!checked){const q=run[index];if(isMatching(q)){if(q.matching.some((_,i)=>selected[i]===null||selected[i]===undefined))return;}else if(!selected.length && q.answer!=='None')return;checked=true; history[index]={selected:[...selected],correct:isCorrect(),checked:true}; reveal();$('next').innerHTML=index===run.length-1?'See results <span>→</span>':'Next question <span>→</span>';return;}
+  if(index<run.length-1){index++;render();}else finish();
 }
 function back(){
   if(index===0)return;
-  if(checked){const previous=history[index]; if(previous?.correct)score--;history[index]=null;}
-  index--;const old=history[index];selected=old?.selected||[];checked=!!old;render();
+  index--;render();
 }
 function finish(){
-  $('final-score').textContent=`${score} / ${run.length}`;
-  const pct=run.length?Math.round(score/run.length*100):0;
+  updateScore();
+  const maximum=maxPoints();
+  $('final-score').textContent=`${score} / ${maximum}`;
+  const pct=maximum?Math.round(score/maximum*100):0;
   $('percent').textContent=`${pct}% correct`;
   $('result-title').textContent=pct>=80?'Excellent work.':pct>=60?'Good progress.':'Keep practicing.';
-  $('result-copy').textContent=`You answered ${score} of ${run.length} questions correctly. Review the questions you missed, then give it another try.`;
+  $('result-copy').textContent=`You earned ${score} of ${maximum} possible points. Matching questions award one point for each correct pair. Review the questions you missed, then try again.`;
   show('results');
-}
-$('start').addEventListener('click',start);$('next').addEventListener('click',checkOrNext);$('back').addEventListener('click',back);
-$('quit').addEventListener('click',()=>show('intro'));$('retry').addEventListener('click',start);$('home').addEventListener('click',()=>show('intro'));
