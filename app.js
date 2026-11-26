@@ -77,14 +77,9 @@ function isCorrect(){
   return selected.length===key.length&&selected.every(x=>key.includes(x));
 }
 function pointsFor(q,response){
-  if(!response?.checked)return 0;
-  if(isMatching(q))return q.matching.reduce((points,pair,i)=>points+(response.selected[i]===pair.right?1:0),0);
-  if(q.answer==='None')return response.selected.length===0?1:0;
-  if(q.answer==='Match'||q.answer==='Order')return 0;
-  const correct=[...q.answer].filter(c=>/[A-F]/.test(c));
-  return response.selected.length===correct.length&&response.selected.every(c=>correct.includes(c))?1:0;
+  return response?.checked&&response.correct?1:0;
 }
-function maxPoints(){return run.reduce((total,q)=>total+(isMatching(q)?q.matching.length:1),0);}
+function maxPoints(){return run.length;}
 function updateScore(){score=run.reduce((total,q,i)=>total+pointsFor(q,history[i]),0);$('score').textContent=score;}
 function reveal(){
   const q=run[index], key=decodeAnswer(q), correct=isCorrect();
@@ -94,3 +89,38 @@ function reveal(){
       control.classList.add(control.value===q.matching[i].right?'match-correct':'match-wrong');
     });
   }
+  document.querySelectorAll('.answer').forEach(b=>{
+    const letter=b.querySelector('.answer-key').textContent;
+    if(key&&key.includes(letter))b.classList.add('correct');
+    else if(selected.includes(letter))b.classList.add('wrong');
+  });
+  const f=$('feedback'); f.classList.remove('hidden');
+  if(isMatching(q)){
+    const errors=q.matching.map((pair,i)=>selected[i]===pair.right?null:`<b>${pair.left}</b> → ${pair.right}`).filter(Boolean);
+    f.classList.toggle('good',correct);f.innerHTML=correct?'<b>All matches correct.</b> Nice work.':`<b>Check these correct matches:</b><br>${errors.join('<br>')}`;
+  }
+  else if(key===null){f.innerHTML=`The reviewer marks this as a <b>${q.answer.toLowerCase()}</b> item. The matching/order layout is retained as written in the source.`;}
+  else if(!key.length){f.innerHTML=correct?'<b>Correct.</b> The reviewer key lists no correct option.':'<b>Incorrect.</b> The reviewer key lists no correct option; leave every choice unselected.';}
+  else if(correct){f.classList.add('good');f.innerHTML='<b>Correct.</b> Nice work.';}
+  else {const answer=key.length?key.join(', '):'No listed choice';f.innerHTML=`<b>Incorrect.</b> Correct answer: <b>${answer}</b>.`;}
+}
+function checkOrNext(){
+  if(!checked){const q=run[index];if(isMatching(q)){if(q.matching.some((_,i)=>selected[i]===null||selected[i]===undefined))return;}else if(!selected.length && q.answer!=='None')return;checked=true; history[index]={selected:[...selected],correct:isCorrect(),checked:true}; reveal();$('next').innerHTML=index===run.length-1?'See results <span>→</span>':'Next question <span>→</span>';return;}
+  if(index<run.length-1){index++;render();}else finish();
+}
+function back(){
+  if(index===0)return;
+  index--;render();
+}
+function finish(){
+  updateScore();
+  const maximum=maxPoints();
+  $('final-score').textContent=`${score} / ${maximum}`;
+  const pct=maximum?Math.round(score/maximum*100):0;
+  $('percent').textContent=`${pct}% correct`;
+  $('result-title').textContent=pct>=80?'Excellent work.':pct>=60?'Good progress.':'Keep practicing.';
+  $('result-copy').textContent=`You answered ${score} of ${maximum} questions correctly. Each question is worth one point; matching questions count as correct when every pair is matched correctly. Review the questions you missed, then try again.`;
+  show('results');
+}
+$('start').addEventListener('click',start);$('next').addEventListener('click',checkOrNext);$('back').addEventListener('click',back);
+$('quit').addEventListener('click',()=>show('intro'));$('retry').addEventListener('click',start);$('home').addEventListener('click',()=>show('intro'));
